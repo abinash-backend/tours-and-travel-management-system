@@ -6,6 +6,7 @@
 ![JWT](https://img.shields.io/badge/Auth-JWT-blue?style=for-the-badge&logo=jsonwebtokens)
 ![RBAC](https://img.shields.io/badge/Authorization-RBAC-darkgreen?style=for-the-badge)
 ![Database](https://img.shields.io/badge/Database-PostgreSQL-4169E1?style=for-the-badge&logo=postgresql)
+![Cache](https://img.shields.io/badge/Cache-Redis-DC382D?style=for-the-badge&logo=redis)
 ![Build](https://img.shields.io/badge/Build-Maven-C71A36?style=for-the-badge&logo=apachemaven)
 ![API Docs](https://img.shields.io/badge/API-Swagger%20%2F%20OpenAPI-85EA2D?style=for-the-badge&logo=swagger)
 ![Testing](https://img.shields.io/badge/Tests-JUnit5%20%7C%20Mockito%20%7C%20MockMvc-25A162?style=for-the-badge)
@@ -49,11 +50,12 @@ The application is structured as a **modular monolith**, where business capabili
 
 | Module | Responsibility |
 | --- | --- |
-| `user` | User registration, login, profile management, and identity-related operations |
+| `auth` | Authentication, JWT issuance, request security, and login-related workflows |
+| `user` | User registration, profile management, and identity-related operations |
 | `packages` | Travel package creation, updates, retrieval, and package catalog management |
 | `booking` | Booking lifecycle management, booking creation, status tracking, and related workflows |
 | `payment` | Payment processing flow, payment status handling, and payment-related integration points |
-| `common` | Shared infrastructure including security, JWT handling, exceptions, configuration, and reusable utilities |
+| `common` | Shared infrastructure including configuration, exception handling, API helpers, and reusable utilities |
 
 ---
 
@@ -73,7 +75,7 @@ The application is structured as a **modular monolith**, where business capabili
                                          v
         +-------------------------------------------------------------------+
         |                         Service Layer                             |
-        |   user   |   packages   |   booking   |   payment   |   common    |
+        | auth | user | packages | booking | payment | common |
         +-------------------------+-------------+-------------+--------------+
                                   |
                                   v
@@ -137,10 +139,11 @@ User Login -> Credentials Validation -> JWT Generation -> Secured API Access -> 
 | Category | Technologies |
 | --- | --- |
 | Language | Java 21 |
-| Framework | Spring Boot 3 |
+| Framework | Spring Boot 3.1.4 |
 | Security | Spring Security, JWT Authentication, RBAC Authorization |
 | Persistence | Spring Data JPA, Hibernate |
 | Database | PostgreSQL |
+| Caching | Spring Cache, Redis |
 | Build Tool | Maven |
 | API Documentation | Swagger / OpenAPI |
 | Testing | JUnit 5, Mockito, MockMvc |
@@ -192,16 +195,21 @@ TOURS-AND-TRAVEL-MANAGEMENT-SYSTEM/
 |   |-- main/
 |   |   |-- java/
 |   |   |   `-- com/
-|   |   |       `-- ...
-|   |   |           |-- user/
-|   |   |           |-- packages/
-|   |   |           |-- booking/
-|   |   |           |-- payment/
-|   |   |           `-- common/
+|   |   |       `-- aj/
+|   |   |           `-- travel/
+|   |   |               |-- auth/
+|   |   |               |-- user/
+|   |   |               |-- packages/
+|   |   |               |-- booking/
+|   |   |               |-- payment/
+|   |   |               `-- common/
 |   |   `-- resources/
-|   |       `-- application.yml
+|   |       |-- application.yml
+|   |       |-- application-dev.yml
+|   |       `-- application-prod.yml
 |   `-- test/
 |-- .dockerignore
+|-- .env
 |-- Dockerfile
 |-- docker-compose.yml
 |-- pom.xml
@@ -217,8 +225,8 @@ TOURS-AND-TRAVEL-MANAGEMENT-SYSTEM/
 ### Prerequisites
 
 - Java 21
-- Maven
 - PostgreSQL
+- Redis
 - Git
 - Docker Desktop or Docker Engine
 
@@ -232,14 +240,28 @@ cd TOURS-AND-TRAVEL-MANAGEMENT-SYSTEM
 ### Build the Project
 
 ```bash
-mvn clean install
+./mvnw clean verify
+```
+
+On Windows PowerShell:
+
+```powershell
+.\mvnw.cmd clean verify
 ```
 
 ### Run the Application
 
 ```bash
-mvn spring-boot:run
+./mvnw spring-boot:run
 ```
+
+On Windows PowerShell:
+
+```powershell
+.\mvnw.cmd spring-boot:run
+```
+
+The default `dev` profile expects local PostgreSQL and Redis instances unless you override the environment variables below.
 
 After startup, the backend will be available locally and the Swagger UI can be accessed from the documentation URL above.
 
@@ -247,28 +269,40 @@ After startup, the backend will be available locally and the Swagger UI can be a
 
 ## Configuration
 
-The application uses environment variables for runtime configuration. Default local values are provided for development.
+The application uses Spring profiles with environment variables for runtime configuration. By default, it starts with `SPRING_PROFILES_ACTIVE=dev`. The defaults below are the values defined in `application-dev.yml`.
 
 | Variable | Default |
 | --- | --- |
+| `SPRING_PROFILES_ACTIVE` | `dev` |
+| `SERVER_PORT` | `8080` |
 | `DB_URL` | `jdbc:postgresql://localhost:5432/travel_db` |
 | `DB_USERNAME` | `postgres` |
-| `DB_PASSWORD` | `postgres` |
+| `DB_PASSWORD` | `123456` |
+| `DB_POOL_SIZE` | `10` |
+| `DB_MIN_IDLE` | `2` |
+| `DB_IDLE_TIMEOUT` | `300000` |
+| `DB_MAX_LIFETIME` | `1800000` |
+| `DB_CONNECTION_TIMEOUT` | `30000` |
 | `JPA_DDL_AUTO` | `update` |
 | `JPA_SHOW_SQL` | `true` |
-| `SERVER_PORT` | `8080` |
-| `JWT_SECRET` | `change-this-jwt-secret-key-before-production-use` |
+| `HIBERNATE_FORMAT_SQL` | `true` |
+| `REDIS_HOST` | `localhost` |
+| `REDIS_PORT` | `6379` |
+| `REDIS_TIMEOUT` | `2s` |
+| `JWT_SECRET` | `local-dev-jwt-secret-change-me` |
 | `RAZORPAY_KEY` | empty |
 | `RAZORPAY_SECRET` | empty |
 | `BOOTSTRAP_ADMIN_NAME` | `Default Admin` |
 | `BOOTSTRAP_ADMIN_EMAIL` | `admin@travel.local` |
-| `BOOTSTRAP_ADMIN_PASSWORD` | empty |
+| `BOOTSTRAP_ADMIN_PASSWORD` | `admin123` |
+
+The `prod` profile does not provide fallbacks for sensitive or infrastructure-specific settings, so those values must be supplied explicitly.
 
 ---
 
 ## Docker
 
-Build and run the backend with PostgreSQL:
+Build and run the backend with PostgreSQL and Redis:
 
 ```bash
 docker compose up --build
@@ -341,12 +375,12 @@ GitHub Actions is used to automate backend validation on every relevant change.
 
 ### CI Responsibilities
 
-- Build verification with Maven
+- Build verification with the Maven wrapper
 - Automated test execution
 - Early feedback for integration issues
 - Consistent validation across branches
 
-The pipeline helps maintain code quality and keeps the main integration path stable for contributors.
+The current workflow runs on pushes to `dev` and `architecture-rebuild`, and on pull requests targeting `dev`.
 
 ---
 
